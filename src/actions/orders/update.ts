@@ -1,10 +1,11 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { transaction } from 'objection';
+import { transaction, ValidationError } from 'objection';
 import Order from '../../models/Order';
 import OrderItem from '../../models/OrderItem';
 import Product from '../../models/Product';
 import { OrderStatus } from '../../models/Order';
-import { ValidationError } from 'objection';
+import { calculateTotals, validateItems, ProductNotFoundError } from '../../handlers/orderHandlers';
+
 
 interface Item {
     product_id: number;
@@ -54,36 +55,8 @@ export default async (
             });
         }
 
-        const productIds = items.map((item: Item) => item.product_id);
-        const products = await Product.query(trx).findByIds(productIds);
-        const productMap = new Map(products.map(product => [product.id, product]));
-
-        let totalPaid = 0;
-        let totalDiscount = 0;
-
-        const orderItems = items.map((item) => {
-            const product = productMap.get(item.product_id);
-
-            if (!product) {
-                throw new Error(`Product with ID ${item.product_id} not found`);
-            }
-
-            const itemPaid = product.price * item.quantity;
-            const itemDiscount = item.discount ?? 0;
-
-            totalPaid += itemPaid;
-            totalDiscount += itemDiscount;
-
-            return {
-                order_id: order.id,
-                product_id: item.product_id,
-                quantity: item.quantity,
-                tax: 0,
-                shipping: 0,
-                discount: itemDiscount,
-                paid: itemPaid,
-            };
-        });
+        const { productMap } = await validateItems(items, trx);
+        const { orderItems, totalPaid, totalDiscount } = calculateTotals(order, items, productMap);
 
         order.total_paid = totalPaid;
         order.total_discount = totalDiscount;
@@ -130,10 +103,8 @@ export default async (
     } catch (error) {
         await trx.rollback();
 
-        if (error instanceof Error) {
-            if (error.message.includes('Product with ID')) {
-                return reply.code(400).send({ message: error.message });
-            }
+        if (error instanceof ProductNotFoundError) {
+            return reply.code(404).send({ message: error.message });
         }
 
         if (error instanceof ValidationError) {

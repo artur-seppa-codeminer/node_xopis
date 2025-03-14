@@ -21,7 +21,7 @@ export default async (
 
   try {
     const { productMap } = await validateItems(items, trx);
-    const { orderItems, totalPaid, totalDiscount } = calculateTotals(items, productMap);
+    const { orderItems, totalPaid, totalDiscount } = calculateTotals(null, items, productMap);
 
     const orderWithItems = {
       customer_id,

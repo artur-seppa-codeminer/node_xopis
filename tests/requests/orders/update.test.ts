@@ -74,7 +74,7 @@ describe('POST /orders/update', () => {
 
             const response = await makeRequest(updateInput);
 
-            expect(response.statusCode).toBe(400);
+            expect(response.statusCode).toBe(404);
             expect(response.json()).toEqual(
                 expect.objectContaining({
                     message: expect.stringContaining('Product with ID 999 not found'),

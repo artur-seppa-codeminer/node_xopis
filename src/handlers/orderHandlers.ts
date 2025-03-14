@@ -18,7 +18,7 @@ export async function validateItems(items: Item[], trx: any) {
   return { productMap };
 }
 
-export function calculateTotals(items: Item[], productMap: Map<number, Product>) {
+export function calculateTotals(order:any, items: Item[], productMap: Map<number, Product>) {
   let totalPaid = 0;
   let totalDiscount = 0;
 
@@ -36,7 +36,7 @@ export function calculateTotals(items: Item[], productMap: Map<number, Product>)
     totalDiscount += itemDiscount;
 
     return {
-      order_id: null,
+      order_id: order?.id || null,
       product_id: item.product_id,
       quantity: item.quantity,
       tax: 0,
