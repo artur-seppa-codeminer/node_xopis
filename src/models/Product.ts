@@ -38,8 +38,8 @@ class Product extends Model {
         join: {
           from: 'products.id',
           through: {
-            from: 'order_items.product_id',
-            to: 'order_items.order_id',
+            from: 'orders_items.product_id',
+            to: 'orders_items.order_id',
           },
           to: 'orders.id',
         }

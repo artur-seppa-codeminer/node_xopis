@@ -3,7 +3,7 @@ import Order from './Order';
 import Product from './Product';
 
 class OrderItem extends Model {
-  static tableName = 'order_items';
+  static tableName = 'orders_items';
 
   id!: number;
   order_id!: number;
@@ -41,7 +41,7 @@ class OrderItem extends Model {
         relation: Model.BelongsToOneRelation,
         modelClass: Order,
         join: {
-          from: 'order_items.order_id',
+          from: 'orders_items.order_id',
           to: 'orders.id',
         }
       },
@@ -50,7 +50,7 @@ class OrderItem extends Model {
         modelClass: Product,
         join: {
 
-          from: 'order_items.product_id',
+          from: 'orders_items.product_id',
           to: 'products.id',
         }
       }
