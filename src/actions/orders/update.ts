@@ -1,17 +1,9 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { transaction, ValidationError } from 'objection';
 import Order from '../../models/Order';
-import OrderItem from '../../models/OrderItem';
-import Product from '../../models/Product';
 import { OrderStatus } from '../../models/Order';
 import { calculateTotals, validateItems, ProductNotFoundError } from '../../handlers/orderHandlers';
-
-
-interface Item {
-    product_id: number;
-    quantity: number;
-    discount?: number;
-}
+import { Item } from '../../types/item';
 
 type Request = FastifyRequest<{ Body: { id?: number; customer_id: number; status: OrderStatus; items: Item[] } }>;
 
@@ -26,8 +18,6 @@ export default async (
     const trx = await transaction.start(Order.knex());
 
     try {
-        let order: Order;
-
         if (id) {
             const existingOrder = await Order.query(trx).findById(id);
 
@@ -38,68 +28,44 @@ export default async (
             if (existingOrder.status !== OrderStatus.PaymentPending) {
                 return reply.code(400).send({ message: `Only orders with status 'payment_pending' can be updated` });
             }
-
-            if (status) {
-                existingOrder.status = status;
-            }
-
-            order = existingOrder;
-        } else {
-            order = await Order.query(trx).insert({
-                customer_id,
-                total_paid: 0,
-                total_tax: 0,
-                total_shipping: 0,
-                total_discount: 0,
-                status: status || OrderStatus.PaymentPending,
-            });
         }
 
         const { productMap } = await validateItems(items, trx);
-        const { orderItems, totalPaid, totalDiscount } = calculateTotals(order, items, productMap);
+        const { orderItems, totalPaid, totalDiscount } = calculateTotals(items, productMap);
 
-        order.total_paid = totalPaid;
-        order.total_discount = totalDiscount;
+        const orderWithItems = {
+            id,
+            customer_id,
+            total_paid: totalPaid,
+            total_tax: 0,
+            total_shipping: 0,
+            total_discount: totalDiscount,
+            status: status || OrderStatus.PaymentPending,
+            items: orderItems,
+        };
 
-        await Order.query(trx).patchAndFetchById(order.id, {
-            total_paid: order.total_paid,
-            total_discount: order.total_discount,
-            status: order.status,
+        const updatedOrder = await Order.query(trx).upsertGraph(orderWithItems, {
+            relate: true,
+            unrelate: true,
+            noDelete: false,
         });
-
-        if (!items) {
-            await OrderItem.query(trx)
-                .delete()
-                .where('order_id', order.id)
-        } else {
-            const existingOrderItems = await OrderItem.query(trx).where('order_id', order.id);
-            const existingOrderItemMap = new Map(existingOrderItems.map(item => [item.product_id, item]));
-
-            for (const newItem of orderItems) {
-                const existingItem = existingOrderItemMap.get(newItem.product_id);
-
-                if (existingItem) {
-                    await OrderItem.query(trx)
-                        .patch({
-                            quantity: newItem.quantity,
-                            discount: newItem.discount,
-                            paid: newItem.paid,
-                        })
-                        .where('id', existingItem.id);
-                } else {
-                    await OrderItem.query(trx).insert(newItem);
-                }
-            }
-        }
 
         await trx.commit();
 
-        return reply.code(200).send({
-            id: order.id,
-            customer_id: order.customer_id,
-            status: order.status,
-            items: orderItems,
-        });
+        const response = {
+            id: updatedOrder.id,
+            customer_id: updatedOrder.customer_id,
+            total_paid: updatedOrder.total_paid,
+            total_discount: updatedOrder.total_discount,
+            status: updatedOrder.status,
+            items: updatedOrder.items.map((item: { product_id: any; quantity: any; discount: any; }) => ({
+                product_id: item.product_id,
+                quantity: item.quantity,
+                discount: item.discount,
+            })),
+        };
+        
+        return reply.code(200).send(response);
     } catch (error) {
         await trx.rollback();
 

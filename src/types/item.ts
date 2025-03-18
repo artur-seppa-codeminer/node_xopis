@@ -1,4 +1,4 @@
-export interface Item {
+export type Item = {
     product_id: number;
     quantity: number;
     discount?: number;
